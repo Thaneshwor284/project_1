@@ -1,134 +1,109 @@
-import os
-import numpy as np
-import joblib
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import classification_report, accuracy_score
 import json
+import os
 
-def load_features_and_labels(split_name):
-    """Load features and labels for a specific split"""
-    features_path = f"models/{split_name}_features.npy"
-    labels_path = f"models/{split_name}_labels.npy"
-    
-    if not os.path.exists(features_path) or not os.path.exists(labels_path):
-        raise FileNotFoundError(f"Feature files not found for {split_name}")
-    
-    features = np.load(features_path)
-    labels = np.load(labels_path)
-    
-    print(f"Loaded {split_name}: {features.shape[0]} samples, {features.shape[1]} features")
-    return features, labels
+import joblib
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
-def train_svm(X_train, y_train):
-    """Train SVM classifier"""
-    print("\nTraining SVM classifier...")
-    svm = SVC(kernel='rbf', C=10, gamma='scale', random_state=42)
-    svm.fit(X_train, y_train)
-    print("[OK] SVM training completed")
-    return svm
+matplotlib.use('Agg')
 
-def train_knn(X_train, y_train):
-    """Train KNN classifier"""
-    print("\nTraining KNN classifier...")
-    knn = KNeighborsClassifier(n_neighbors=5, weights='distance')
-    knn.fit(X_train, y_train)
-    print("[OK] KNN training completed")
-    return knn
-
-def evaluate_model(model, X_test, y_test, model_name):
-    """Evaluate model and print metrics"""
-    print(f"\nEvaluating {model_name}...")
-    y_pred = model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f"Accuracy: {accuracy:.4f}")
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred))
-    return accuracy
-
-def save_model(model, model_path):
-    """Save trained model"""
-    joblib.dump(model, model_path)
-    print(f"[OK] Model saved to {model_path}")
-
-def save_training_results(results, output_path):
-    """Save training results to JSON"""
-    with open(output_path, 'w') as f:
-        json.dump(results, f, indent=2)
-    print(f"[OK] Results saved to {output_path}")
 
 def main():
-    print("=" * 60)
-    print("TRAINING SVM AND KNN CLASSIFIERS")
-    print("=" * 60)
-    
-    # Create models directory if it doesn't exist
-    os.makedirs("models", exist_ok=True)
-    os.makedirs("outputs", exist_ok=True)
-    
-    # Load training data
-    print("Loading training data...")
-    X_train, y_train = load_features_and_labels('train')
-    
-    # Load validation data
-    print("Loading validation data...")
-    X_val, y_val = load_features_and_labels('val')
-    
-    # Load test data
-    print("Loading test data...")
-    X_test, y_test = load_features_and_labels('test')
-    
-    # Encode labels
-    print("\nEncoding labels...")
-    label_encoder = LabelEncoder()
-    y_train_encoded = label_encoder.fit_transform(y_train)
-    y_val_encoded = label_encoder.transform(y_val)
-    y_test_encoded = label_encoder.transform(y_test)
-    
-    # Save label encoder
-    joblib.dump(label_encoder, "models/label_encoder.pkl")
-    print("[OK] Label encoder saved")
-    
-    # Train SVM
-    svm_model = train_svm(X_train, y_train_encoded)
-    
-    # Train KNN
-    knn_model = train_knn(X_train, y_train_encoded)
-    
-    # Evaluate SVM
-    svm_accuracy = evaluate_model(svm_model, X_val, y_val_encoded, "SVM")
-    
-    # Evaluate KNN
-    knn_accuracy = evaluate_model(knn_model, X_val, y_val_encoded, "KNN")
-    
-    # Save models
-    save_model(svm_model, "models/svm_model.pkl")
-    save_model(knn_model, "models/knn_model.pkl")
-    
-    # Final evaluation on test set
-    print("\n" + "=" * 60)
-    print("FINAL TEST SET EVALUATION")
-    print("=" * 60)
-    
-    svm_test_accuracy = evaluate_model(svm_model, X_test, y_test_encoded, "SVM (Test)")
-    knn_test_accuracy = evaluate_model(knn_model, X_test, y_test_encoded, "KNN (Test)")
-    
-    # Save results
-    results = {
-        'svm_val_accuracy': float(svm_accuracy),
-        'knn_val_accuracy': float(knn_accuracy),
-        'svm_test_accuracy': float(svm_test_accuracy),
-        'knn_test_accuracy': float(knn_test_accuracy),
-        'classes': label_encoder.classes_.tolist()
-    }
-    save_training_results(results, "outputs/traditional_ml_results.json")
-    
-    print("\n" + "=" * 60)
-    print("TRAINING COMPLETED SUCCESSFULLY")
-    print("=" * 60)
-    print(f"SVM Test Accuracy: {svm_test_accuracy:.4f}")
-    print(f"KNN Test Accuracy: {knn_test_accuracy:.4f}")
+    print('\n' + '=' * 60)
+    print('STEP 4: TRAIN SVM & KNN CLASSIFIERS')
+    print('=' * 60)
 
-if __name__ == "__main__":
+    print('\n✓ Loading features...')
+    X_train = np.load('models/train_features.npy')
+    y_train = np.load('models/train_labels.npy')
+    X_test = np.load('models/test_features.npy')
+    y_test = np.load('models/test_labels.npy')
+
+    with open('data_splits.json', 'r') as f:
+        splits = json.load(f)
+
+    class_names = splits['class_names']
+    os.makedirs('outputs', exist_ok=True)
+
+    print(f'  Train: {X_train.shape[0]} samples, {X_train.shape[1]} features')
+    print(f'  Test:  {X_test.shape[0]} samples')
+
+    print('\n✓ Normalizing features...')
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    print('\n✓ Training SVM classifier...')
+    svm_model = SVC(kernel='rbf', C=100, gamma='scale', probability=False)
+    svm_model.fit(X_train_scaled, y_train)
+
+    y_pred_svm = svm_model.predict(X_test_scaled)
+    svm_accuracy = accuracy_score(y_test, y_pred_svm)
+
+    print(f'\n  SVM Accuracy: {svm_accuracy:.4f}')
+    print('\n  Classification Report (SVM):')
+    svm_report = classification_report(y_test, y_pred_svm, target_names=class_names, zero_division=0)
+    print(svm_report)
+
+    print('\n✓ Training KNN classifier...')
+    knn_model = KNeighborsClassifier(n_neighbors=5)
+    knn_model.fit(X_train_scaled, y_train)
+
+    y_pred_knn = knn_model.predict(X_test_scaled)
+    knn_accuracy = accuracy_score(y_test, y_pred_knn)
+
+    print(f'\n  KNN Accuracy: {knn_accuracy:.4f}')
+    print('\n  Classification Report (KNN):')
+    knn_report = classification_report(y_test, y_pred_knn, target_names=class_names, zero_division=0)
+    print(knn_report)
+
+    print('\n✓ Saving models...')
+    joblib.dump(svm_model, 'models/svm_model.pkl')
+    joblib.dump(knn_model, 'models/knn_model.pkl')
+    joblib.dump(scaler, 'models/scaler.pkl')
+
+    results = {
+        'svm_accuracy': float(svm_accuracy),
+        'knn_accuracy': float(knn_accuracy),
+        'num_features': X_train.shape[1],
+        'num_classes': len(class_names),
+        'class_names': class_names
+    }
+
+    with open('models/classical_results.json', 'w') as f:
+        json.dump(results, f, indent=2)
+
+    with open('outputs/classical_svm_report.txt', 'w') as f:
+        f.write(svm_report)
+    with open('outputs/classical_knn_report.txt', 'w') as f:
+        f.write(knn_report)
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+    cm_svm = confusion_matrix(y_test, y_pred_svm)
+    sns.heatmap(cm_svm, annot=True, fmt='d', cmap='Blues', ax=axes[0], cbar=True, xticklabels=class_names, yticklabels=class_names)
+    axes[0].set_title(f'SVM Confusion Matrix (Acc: {svm_accuracy:.4f})', fontsize=12, fontweight='bold')
+    axes[0].set_xlabel('Predicted')
+    axes[0].set_ylabel('Actual')
+
+    cm_knn = confusion_matrix(y_test, y_pred_knn)
+    sns.heatmap(cm_knn, annot=True, fmt='d', cmap='Blues', ax=axes[1], cbar=True, xticklabels=class_names, yticklabels=class_names)
+    axes[1].set_title(f'KNN Confusion Matrix (Acc: {knn_accuracy:.4f})', fontsize=12, fontweight='bold')
+    axes[1].set_xlabel('Predicted')
+    axes[1].set_ylabel('Actual')
+
+    plt.tight_layout()
+    plt.savefig('outputs/confusion_matrices_classical.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    print('\n✅ Classical models trained and saved!')
+    print('=' * 60 + '\n')
+
+
+if __name__ == '__main__':
     main()

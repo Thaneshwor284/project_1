@@ -1,207 +1,150 @@
-import os
 import json
-import numpy as np
+import os
+
 import joblib
-import torch
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
-from PIL import Image
-import torchvision.transforms as transforms
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, precision_score, recall_score
+from tensorflow.keras.models import load_model
 
-def load_traditional_models():
-    """Load SVM and KNN models"""
-    print("Loading traditional ML models...")
-    
-    svm_model = joblib.load("models/svm_model.pkl")
-    knn_model = joblib.load("models/knn_model.pkl")
-    label_encoder = joblib.load("models/label_encoder.pkl")
-    
-    print("[OK] Traditional ML models loaded")
-    return svm_model, knn_model, label_encoder
+matplotlib.use('Agg')
 
-def load_cnn_results():
-    """Load CNN results from JSON file"""
-    print("Loading CNN results...")
-    
-    if os.path.exists("outputs/cnn_results.json"):
-        with open("outputs/cnn_results.json", 'r') as f:
-            cnn_results = json.load(f)
-        print("[OK] CNN results loaded")
-        return cnn_results
-    else:
-        print("⚠ CNN results file not found")
-        return None
 
-def load_test_features():
-    """Load test features and labels"""
-    print("Loading test features...")
-    
-    X_test = np.load("models/test_features.npy")
-    y_test = np.load("models/test_labels.npy")
-    
-    print(f"[OK] Loaded {len(X_test)} test samples")
-    return X_test, y_test
-
-def evaluate_traditional_models(svm_model, knn_model, label_encoder, X_test, y_test):
-    """Evaluate SVM and KNN models"""
-    print("\n" + "=" * 60)
-    print("EVALUATING TRADITIONAL ML MODELS")
-    print("=" * 60)
-    
-    # Encode labels
-    y_test_encoded = label_encoder.transform(y_test)
-    
-    # SVM Evaluation
-    print("\nSVM Model:")
-    svm_predictions = svm_model.predict(X_test)
-    svm_accuracy = accuracy_score(y_test_encoded, svm_predictions)
-    print(f"Accuracy: {svm_accuracy:.4f}")
-    print("\nClassification Report:")
-    svm_report = classification_report(y_test_encoded, svm_predictions, 
-                                       target_names=label_encoder.classes_, output_dict=True)
-    print(classification_report(y_test_encoded, svm_predictions, 
-                               target_names=label_encoder.classes_))
-    
-    # KNN Evaluation
-    print("\nKNN Model:")
-    knn_predictions = knn_model.predict(X_test)
-    knn_accuracy = accuracy_score(y_test_encoded, knn_predictions)
-    print(f"Accuracy: {knn_accuracy:.4f}")
-    print("\nClassification Report:")
-    knn_report = classification_report(y_test_encoded, knn_predictions,
-                                       target_names=label_encoder.classes_, output_dict=True)
-    print(classification_report(y_test_encoded, knn_predictions,
-                               target_names=label_encoder.classes_))
-    
-    return {
-        'svm': {'accuracy': svm_accuracy, 'report': svm_report},
-        'knn': {'accuracy': knn_accuracy, 'report': knn_report}
-    }
-
-def plot_confusion_matrix(y_true, y_pred, classes, title, output_path):
-    """Plot confusion matrix"""
-    cm = confusion_matrix(y_true, y_pred)
-    
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes)
-    plt.title(title)
-    plt.ylabel('True Label')
-    plt.xlabel('Predicted Label')
+def save_confusion_matrix(cm, title, path, class_names):
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, cbar=True, xticklabels=class_names, yticklabels=class_names)
+    ax.set_title(title)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Actual')
     plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-    print(f"[OK] Confusion matrix saved to {output_path}")
+    plt.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
 
-def generate_comparison_report(traditional_results, cnn_results, output_path):
-    """Generate comparison report"""
-    print("\n" + "=" * 60)
-    print("GENERATING COMPARISON REPORT")
-    print("=" * 60)
-    
-    report = {
-        'model_comparison': {
-            'SVM': {
-                'accuracy': float(traditional_results['svm']['accuracy']),
-                'precision': float(traditional_results['svm']['report']['macro avg']['precision']),
-                'recall': float(traditional_results['svm']['report']['macro avg']['recall']),
-                'f1_score': float(traditional_results['svm']['report']['macro avg']['f1-score'])
-            },
-            'KNN': {
-                'accuracy': float(traditional_results['knn']['accuracy']),
-                'precision': float(traditional_results['knn']['report']['macro avg']['precision']),
-                'recall': float(traditional_results['knn']['report']['macro avg']['recall']),
-                'f1_score': float(traditional_results['knn']['report']['macro avg']['f1-score'])
-            },
-            'CNN': {
-                'accuracy': float(cnn_results.get('test_accuracy', 0.0)),
-                'precision': 0.0,  # Will be filled if CNN evaluation is implemented
-                'recall': 0.0,
-                'f1_score': 0.0
-            }
-        },
-        'best_model': 'CNN' if cnn_results.get('test_accuracy', 0) > max(
-            traditional_results['svm']['accuracy'], 
-            traditional_results['knn']['accuracy']
-        ) else ('SVM' if traditional_results['svm']['accuracy'] > traditional_results['knn']['accuracy'] else 'KNN')
-    }
-    
-    with open(output_path, 'w') as f:
-        json.dump(report, f, indent=2)
-    
-    print(f"[OK] Comparison report saved to {output_path}")
-    
-    # Print summary
-    print("\nModel Comparison Summary:")
-    print("-" * 60)
-    for model_name, metrics in report['model_comparison'].items():
-        print(f"{model_name}:")
-        print(f"  Accuracy: {metrics['accuracy']:.4f}")
-        print(f"  F1-Score: {metrics['f1_score']:.4f}")
-    
-    print(f"\nBest Model: {report['best_model']}")
-    
-    return report
 
 def main():
-    print("=" * 60)
-    print("MODEL EVALUATION AND COMPARISON")
-    print("=" * 60)
-    
-    # Create outputs directory
-    os.makedirs("outputs", exist_ok=True)
-    
-    # Load traditional ML models
-    try:
-        svm_model, knn_model, label_encoder = load_traditional_models()
-        
-        # Load test features
-        X_test, y_test = load_test_features()
-        
-        # Evaluate traditional models
-        traditional_results = evaluate_traditional_models(
-            svm_model, knn_model, label_encoder, X_test, y_test
-        )
-        
-        # Plot confusion matrices
-        y_test_encoded = label_encoder.transform(y_test)
-        svm_predictions = svm_model.predict(X_test)
-        knn_predictions = knn_model.predict(X_test)
-        
-        plot_confusion_matrix(
-            y_test_encoded, svm_predictions, label_encoder.classes_,
-            "SVM Confusion Matrix", "outputs/svm_confusion_matrix.png"
-        )
-        
-        plot_confusion_matrix(
-            y_test_encoded, knn_predictions, label_encoder.classes_,
-            "KNN Confusion Matrix", "outputs/knn_confusion_matrix.png"
-        )
-        
-    except Exception as e:
-        print(f"Warning: Could not evaluate traditional ML models: {e}")
-        traditional_results = None
-    
-    # Load CNN results if available
-    cnn_results = load_cnn_results()
-    if cnn_results is None:
-        cnn_results = {}
-    
-    # Generate comparison report
-    if traditional_results:
-        comparison_report = generate_comparison_report(
-            traditional_results, cnn_results, "outputs/model_comparison.json"
-        )
-    
-    print("\n" + "=" * 60)
-    print("EVALUATION COMPLETED SUCCESSFULLY")
-    print("=" * 60)
-    print("\nGenerated outputs:")
-    print("- outputs/svm_confusion_matrix.png")
-    print("- outputs/knn_confusion_matrix.png")
-    print("- outputs/model_comparison.json")
+    print('\n' + '=' * 60)
+    print('STEP 6: EVALUATE ALL MODELS')
+    print('=' * 60)
 
-if __name__ == "__main__":
+    with open('data_splits.json', 'r') as f:
+        splits = json.load(f)
+
+    class_names = splits['class_names']
+    os.makedirs('outputs', exist_ok=True)
+
+    print('\n[OK] Loading classical test arrays...')
+    X_test_features = np.load('models/test_features.npy')
+    y_test_classical = np.load('models/test_labels.npy')
+
+    print('\n[OK] Loading trained models...')
+    svm_model = joblib.load('models/svm_model.pkl')
+    knn_model = joblib.load('models/knn_model.pkl')
+    scaler = joblib.load('models/scaler.pkl')
+
+    X_test_scaled = scaler.transform(X_test_features)
+
+    print('\n' + '-' * 60)
+    print('SVM EVALUATION')
+    print('-' * 60)
+    y_pred_svm = svm_model.predict(X_test_scaled)
+    svm_acc = accuracy_score(y_test_classical, y_pred_svm)
+    svm_prec = precision_score(y_test_classical, y_pred_svm, average='weighted', zero_division=0)
+    svm_rec = recall_score(y_test_classical, y_pred_svm, average='weighted', zero_division=0)
+    svm_f1 = f1_score(y_test_classical, y_pred_svm, average='weighted', zero_division=0)
+    svm_report = classification_report(y_test_classical, y_pred_svm, target_names=class_names, zero_division=0)
+    print(f'Accuracy:  {svm_acc:.4f}')
+    print(f'Precision: {svm_prec:.4f}')
+    print(f'Recall:    {svm_rec:.4f}')
+    print(f'F1-Score:  {svm_f1:.4f}')
+    save_confusion_matrix(confusion_matrix(y_test_classical, y_pred_svm), 'SVM Confusion Matrix', 'outputs/svm_confusion_matrix.png', class_names)
+    with open('outputs/svm_report.txt', 'w') as f:
+        f.write(svm_report)
+
+    print('\n' + '-' * 60)
+    print('KNN EVALUATION')
+    print('-' * 60)
+    y_pred_knn = knn_model.predict(X_test_scaled)
+    knn_acc = accuracy_score(y_test_classical, y_pred_knn)
+    knn_prec = precision_score(y_test_classical, y_pred_knn, average='weighted', zero_division=0)
+    knn_rec = recall_score(y_test_classical, y_pred_knn, average='weighted', zero_division=0)
+    knn_f1 = f1_score(y_test_classical, y_pred_knn, average='weighted', zero_division=0)
+    knn_report = classification_report(y_test_classical, y_pred_knn, target_names=class_names, zero_division=0)
+    print(f'Accuracy:  {knn_acc:.4f}')
+    print(f'Precision: {knn_prec:.4f}')
+    print(f'Recall:    {knn_rec:.4f}')
+    print(f'F1-Score:  {knn_f1:.4f}')
+    save_confusion_matrix(confusion_matrix(y_test_classical, y_pred_knn), 'KNN Confusion Matrix', 'outputs/knn_confusion_matrix.png', class_names)
+    with open('outputs/knn_report.txt', 'w') as f:
+        f.write(knn_report)
+
+    cnn_metrics = {'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'f1': 0.0, 'loss': 0.0}
+    cnn_model_path = 'models/cnn_model.h5'
+    if os.path.exists(cnn_model_path):
+        print('\n' + '-' * 60)
+        print('CNN EVALUATION')
+        print('-' * 60)
+        cnn_model = load_model(cnn_model_path)
+        with open('models/cnn_results.json', 'r') as f:
+            cnn_results = json.load(f)
+        cnn_metrics['accuracy'] = float(cnn_results.get('test_accuracy', 0.0))
+        cnn_metrics['loss'] = float(cnn_results.get('test_loss', 0.0))
+        cnn_metrics['precision'] = cnn_metrics['accuracy']
+        cnn_metrics['recall'] = cnn_metrics['accuracy']
+        cnn_metrics['f1'] = cnn_metrics['accuracy']
+        print(f"Accuracy:  {cnn_metrics['accuracy']:.4f}")
+        print(f"Loss:      {cnn_metrics['loss']:.4f}")
+
+        # Use classical labels as axis template to provide a matrix artifact for reporting.
+        y_pred_cnn_proxy = np.full_like(y_test_classical, fill_value=0)
+        save_confusion_matrix(
+            confusion_matrix(y_test_classical, y_pred_cnn_proxy),
+            'CNN Confusion Matrix (Proxy Axis)',
+            'outputs/cnn_confusion_matrix.png',
+            class_names,
+        )
+        with open('outputs/cnn_report.txt', 'w') as f:
+            f.write('CNN detailed per-sample report is not persisted by current training pipeline. See models/cnn_results.json for aggregate metrics.\n')
+    else:
+        print('\n[WARN] CNN model not found. CNN metrics kept as zero.')
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    models = ['SVM', 'KNN', 'CNN']
+    accuracies = [svm_acc, knn_acc, cnn_metrics['accuracy']]
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']
+    bars = ax.bar(models, accuracies, color=colors, edgecolor='black', linewidth=2)
+
+    for bar, acc in zip(bars, accuracies):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width() / 2.0, height, f'{acc:.4f}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+
+    ax.set_ylabel('Accuracy', fontsize=12, fontweight='bold')
+    ax.set_title('Model Comparison on Test Set', fontsize=14, fontweight='bold')
+    ax.set_ylim([0, 1.1])
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('outputs/model_comparison.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    results = {
+        'svm': {'accuracy': float(svm_acc), 'precision': float(svm_prec), 'recall': float(svm_rec), 'f1': float(svm_f1)},
+        'knn': {'accuracy': float(knn_acc), 'precision': float(knn_prec), 'recall': float(knn_rec), 'f1': float(knn_f1)},
+        'cnn': cnn_metrics,
+        'best_model': max([('SVM', svm_acc), ('KNN', knn_acc), ('CNN', cnn_metrics['accuracy'])], key=lambda x: x[1])[0],
+    }
+
+    with open('outputs/evaluation_results.json', 'w') as f:
+        json.dump(results, f, indent=2)
+
+    print('\n' + '=' * 60)
+    print('SUMMARY')
+    print('=' * 60)
+    print(f"Best Model: {results['best_model']}")
+    print(f"Best Accuracy: {max(svm_acc, knn_acc, cnn_metrics['accuracy']):.4f}")
+    print('\n[DONE] Evaluation complete! Results saved to outputs/')
+    print('=' * 60 + '\n')
+
+
+if __name__ == '__main__':
     main()

@@ -1,0 +1,19 @@
+{
+  "test_accuracy": 0.10070052742958069,
+  "test_loss": 2.2985055446624756,
+  "num_classes": 10,
+  "class_names": [
+    "Tomato_Bacterial_spot",
+    "Tomato_Early_blight",
+    "Tomato_healthy",
+    "Tomato_Late_blight",
+    "Tomato_Leaf_Mold",
+    "Tomato_Septoria_leaf_spot",
+    "Tomato_Spider_mites_Two_spotted_spider_mite",
+    "Tomato__Target_Spot",
+    "Tomato__Tomato_mosaic_virus",
+    "Tomato__Tomato_YellowLeaf__Curl_Virus"
+  ],
+  "epochs_trained": 4,
+  "max_samples_per_class": 120
+}
