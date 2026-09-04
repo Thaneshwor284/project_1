@@ -84,13 +84,13 @@ python 03_feature_extraction.py
 python 04_train_svm_knn.py
 
 # Step 5: Train CNN model
-python 05_train_cnn.py
+python cnn_train.py --dataset-dir dataset\PlantVillage --results-dir results --image-size 128 --epochs 80 --batch-size 32
 
 # Step 6: Evaluate all models
 python 06_evaluate.py
 
-# Step 7: Run inference on new images
-python 07_inference.py <image_path>
+# Step 7: Run TFLite inference on a new image
+python predict.py <image_path>
 ```
 
 ### Rebuilt Lightweight CNN Training (from scratch)
@@ -118,6 +118,16 @@ Artifacts are saved under `results/`:
 - `summary.txt`
 - `split_summary.json`
 
+### Final CNN and Raspberry Pi Model
+
+The final CNN reaches **91.8% test accuracy** across the 10 tomato disease classes. The converted dynamic-range TFLite model is saved as `results/best_model.tflite` and matches the Keras test accuracy in the conversion check. To classify one image with the TFLite model:
+
+```bash
+python predict.py path/to/leaf.jpg
+```
+
+The script prints the predicted class and confidence. The conversion and Keras/TFLite comparison are documented in `results/tflite_conversion_summary.txt`.
+
 ### Individual Script Descriptions
 
 #### 1. Data Preparation (`01_data_preparation.py`)
@@ -143,11 +153,10 @@ Artifacts are saved under `results/`:
 - Evaluates models on validation and test sets
 - Saves trained models and results
 
-#### 5. CNN Training (`05_train_cnn.py`)
-- Trains a custom 4-layer CNN
-- Uses data augmentation and dropout for regularization
-- Plots training history
-- Saves model checkpoints and results
+#### 5. CNN Training (`cnn_train.py`)
+- Trains the lightweight CNN on the full tomato dataset
+- Uses stratified splits, augmentation, callbacks, and checkpointing
+- Saves evaluation reports and plots under `results/`
 
 #### 6. Model Evaluation (`06_evaluate.py`)
 - Evaluates all trained models on test set
@@ -155,21 +164,10 @@ Artifacts are saved under `results/`:
 - Creates comprehensive comparison report
 - Saves visualizations to `outputs/`
 
-#### 7. Inference (`07_inference.py`)
-- Makes predictions on new images
-- Supports individual model selection or ensemble prediction
-- Provides confidence scores for predictions
-
-Example usage:
-```bash
-# Use all models for prediction
-python 07_inference.py path/to/image.jpg
-
-# Use specific model
-python 07_inference.py path/to/image.jpg --model cnn
-python 07_inference.py path/to/image.jpg --model svm
-python 07_inference.py path/to/image.jpg --model knn
-```
+#### 7. TFLite Inference (`predict.py`)
+- Loads the Raspberry Pi-ready TFLite model
+- Classifies one input image
+- Prints the predicted class and confidence
 
 ## Output Files
 
