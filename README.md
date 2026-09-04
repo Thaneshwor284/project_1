@@ -93,6 +93,31 @@ python 06_evaluate.py
 python 07_inference.py <image_path>
 ```
 
+### Rebuilt Lightweight CNN Training (from scratch)
+
+Use the dedicated end-to-end script below to train/evaluate a lightweight TensorFlow/Keras CNN for the 10-class PlantVillage tomato subset:
+
+```bash
+python cnn_train.py --dataset-dir dataset\PlantVillage --results-dir results --image-size 128 --epochs 80 --batch-size 32
+```
+
+This script performs:
+- Stratified split (70/15/15) directly from the dataset folder structure
+- Training-only augmentation (rotation, flip, zoom, brightness)
+- Lightweight CNN training with BatchNorm + Dropout
+- EarlyStopping, ReduceLROnPlateau, and best-checkpoint saving
+- Test evaluation with confusion matrix, classification report, and summary
+
+Artifacts are saved under `results/`:
+- `best_model.keras`
+- `epoch_metrics.csv`
+- `training_curves.png`
+- `confusion_matrix.png`
+- `classification_report.txt`
+- `classification_report.csv`
+- `summary.txt`
+- `split_summary.json`
+
 ### Individual Script Descriptions
 
 #### 1. Data Preparation (`01_data_preparation.py`)
