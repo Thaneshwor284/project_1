@@ -1,1 +1,0 @@
-CNN detailed per-sample report is not persisted by current training pipeline. See models/cnn_results.json for aggregate metrics.
