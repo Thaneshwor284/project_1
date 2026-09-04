@@ -58,7 +58,7 @@ def collect_image_paths(dataset_dir: Path) -> tuple[list[str], list[int], list[s
         class_images = sorted(
             [
                 file_path
-                for file_path in class_dir.iterdir()
+                for file_path in class_dir.rglob("*")
                 if file_path.is_file() and file_path.suffix.lower() in IMAGE_EXTENSIONS
             ]
         )
@@ -307,9 +307,15 @@ def main() -> None:
     args = parse_args()
     set_seed(args.seed)
 
-    dataset_dir = Path(args.dataset_dir)
+    dataset_dir = Path(args.dataset_dir).expanduser().resolve()
+    print(f"Resolved dataset directory: {dataset_dir}")
     image_paths, labels, class_names = collect_image_paths(dataset_dir)
+    print("Image count per class before splitting:")
+    for class_name, count in class_distribution(labels, class_names).items():
+        print(f"  {class_name}: {count}")
+    print(f"Total images before splitting: {len(image_paths)}")
     if args.max_samples_per_class > 0:
+        print(f"Applying explicit per-class cap: {args.max_samples_per_class}")
         limited_paths: list[str] = []
         limited_labels: list[int] = []
         per_class_counts: dict[int, int] = {}

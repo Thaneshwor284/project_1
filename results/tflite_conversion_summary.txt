@@ -1,0 +1,12 @@
+Keras model: E:\project\project_1.worktrees\cnn-classifier-rebuild-tomato-leaves\results\best_model.keras
+TFLite model: E:\project\project_1.worktrees\cnn-classifier-rebuild-tomato-leaves\results\best_model.tflite
+Quantization: dynamic range (Optimize.DEFAULT, no representative dataset)
+Dataset: E:\project\project_1.worktrees\cnn-classifier-rebuild-tomato-leaves\dataset\PlantVillage
+Test samples: 2402
+Classes: 10
+Keras test loss: 0.319664
+Keras test accuracy: 0.918401
+TFLite test accuracy: 0.918401
+Accuracy delta (TFLite - Keras): -0.000000
+Absolute accuracy loss: 0.000000
+TFLite size (bytes): 82480
