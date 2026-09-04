@@ -10,10 +10,14 @@ from typing import Iterable
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
 from tensorflow.keras import layers, models
 from tensorflow.keras.callbacks import CSVLogger, EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import Adam
 
 SEED = 42
@@ -40,6 +44,8 @@ def set_seed(seed: int) -> None:
 
 
 def collect_image_paths(dataset_dir: Path) -> tuple[list[str], list[int], list[str]]:
+    if not dataset_dir.exists():
+        raise FileNotFoundError(f"Dataset directory does not exist: {dataset_dir}")
     class_dirs = sorted([path for path in dataset_dir.iterdir() if path.is_dir()])
     if not class_dirs:
         raise FileNotFoundError(f"No class folders found in dataset directory: {dataset_dir}")
@@ -98,6 +104,7 @@ def create_stratified_splits(
 def _decode_and_resize(path: tf.Tensor, label: tf.Tensor, image_size: int) -> tuple[tf.Tensor, tf.Tensor]:
     image_bytes = tf.io.read_file(path)
     image = tf.image.decode_image(image_bytes, channels=3, expand_animations=False)
+    image.set_shape([None, None, 3])
     image = tf.image.resize(image, [image_size, image_size], antialias=True)
     image = tf.cast(image, tf.float32)
     return image, label
@@ -125,6 +132,11 @@ def build_dataset(
     return dataset
 
 
+def class_distribution(labels: list[int], class_names: list[str]) -> dict[str, int]:
+    counts = np.bincount(labels, minlength=len(class_names))
+    return {class_names[index]: int(counts[index]) for index in range(len(class_names))}
+
+
 def save_split_summary(split: DatasetSplit, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -133,6 +145,9 @@ def save_split_summary(split: DatasetSplit, output_path: Path) -> None:
         "train_size": len(split.train_paths),
         "val_size": len(split.val_paths),
         "test_size": len(split.test_paths),
+        "train_distribution": class_distribution(split.train_labels, split.class_names),
+        "val_distribution": class_distribution(split.val_labels, split.class_names),
+        "test_distribution": class_distribution(split.test_labels, split.class_names),
     }
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -204,6 +219,72 @@ def plot_training_history(history: tf.keras.callbacks.History, output_path: Path
     plt.close(fig)
 
 
+def save_confusion_matrix_figure(cm: np.ndarray, class_names: list[str], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(11, 9))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=class_names,
+        yticklabels=class_names,
+        ax=ax,
+        cbar=True,
+    )
+    ax.set_title("CNN Confusion Matrix (Test Set)")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def evaluate_and_save_reports(
+    model_path: Path,
+    test_dataset: tf.data.Dataset,
+    test_labels: list[int],
+    class_names: list[str],
+    results_dir: Path,
+) -> float:
+    best_model = load_model(model_path)
+    test_loss, test_accuracy = best_model.evaluate(test_dataset, verbose=0)
+    predictions = best_model.predict(test_dataset, verbose=0)
+    y_pred = np.argmax(predictions, axis=1)
+    y_true = np.asarray(test_labels, dtype=np.int32)
+
+    cm = confusion_matrix(y_true, y_pred, labels=np.arange(len(class_names)))
+    save_confusion_matrix_figure(cm, class_names, results_dir / "confusion_matrix.png")
+
+    report_dict = classification_report(
+        y_true,
+        y_pred,
+        labels=np.arange(len(class_names)),
+        target_names=class_names,
+        output_dict=True,
+        zero_division=0,
+    )
+    report_text = classification_report(
+        y_true,
+        y_pred,
+        labels=np.arange(len(class_names)),
+        target_names=class_names,
+        zero_division=0,
+    )
+    (results_dir / "classification_report.txt").write_text(report_text, encoding="utf-8")
+    pd.DataFrame(report_dict).transpose().to_csv(results_dir / "classification_report.csv")
+
+    summary_lines = [
+        f"Best model path: {model_path}",
+        f"Test loss: {test_loss:.6f}",
+        f"Test accuracy: {test_accuracy:.6f}",
+        f"Num classes: {len(class_names)}",
+    ]
+    (results_dir / "summary.txt").write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+    print(f"Final test accuracy: {test_accuracy:.6f}")
+    return float(test_accuracy)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a lightweight CNN for tomato leaf disease detection.")
     parser.add_argument("--dataset-dir", default="dataset\\PlantVillage", help="Path to PlantVillage tomato dataset.")
@@ -213,6 +294,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=80, help="Training epochs (recommended: 50-100).")
     parser.add_argument("--learning-rate", type=float, default=1e-3, help="Initial learning rate.")
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed.")
+    parser.add_argument(
+        "--max-samples-per-class",
+        type=int,
+        default=0,
+        help="Optional cap per class for fast smoke tests (0 means use all data).",
+    )
     return parser.parse_args()
 
 
@@ -222,12 +309,24 @@ def main() -> None:
 
     dataset_dir = Path(args.dataset_dir)
     image_paths, labels, class_names = collect_image_paths(dataset_dir)
+    if args.max_samples_per_class > 0:
+        limited_paths: list[str] = []
+        limited_labels: list[int] = []
+        per_class_counts: dict[int, int] = {}
+        for path, label in zip(image_paths, labels):
+            current_count = per_class_counts.get(label, 0)
+            if current_count < args.max_samples_per_class:
+                limited_paths.append(path)
+                limited_labels.append(label)
+                per_class_counts[label] = current_count + 1
+        image_paths = limited_paths
+        labels = limited_labels
     split = create_stratified_splits(image_paths=image_paths, labels=labels, class_names=class_names, seed=args.seed)
 
     results_dir = Path(args.results_dir)
     train_ds = build_dataset(split.train_paths, split.train_labels, args.image_size, args.batch_size, training=True)
     val_ds = build_dataset(split.val_paths, split.val_labels, args.image_size, args.batch_size, training=False)
-    build_dataset(split.test_paths, split.test_labels, args.image_size, args.batch_size, training=False)
+    test_ds = build_dataset(split.test_paths, split.test_labels, args.image_size, args.batch_size, training=False)
 
     save_split_summary(split, results_dir / "split_summary.json")
 
@@ -257,9 +356,17 @@ def main() -> None:
         validation_data=val_ds,
         epochs=args.epochs,
         callbacks=callbacks,
+        shuffle=False,
         verbose=1,
     )
     plot_training_history(history, results_dir / "training_curves.png")
+    test_accuracy = evaluate_and_save_reports(
+        model_path=best_model_path,
+        test_dataset=test_ds,
+        test_labels=split.test_labels,
+        class_names=class_names,
+        results_dir=results_dir,
+    )
 
     print(f"Found {len(class_names)} classes and {len(image_paths)} images.")
     print(f"Train/Val/Test: {len(split.train_paths)}/{len(split.val_paths)}/{len(split.test_paths)}")
@@ -267,6 +374,10 @@ def main() -> None:
     print(f"Saved best model to {best_model_path}")
     print(f"Saved epoch metrics to {results_dir / 'epoch_metrics.csv'}")
     print(f"Saved training plot to {results_dir / 'training_curves.png'}")
+    print(f"Saved confusion matrix to {results_dir / 'confusion_matrix.png'}")
+    print(f"Saved classification report to {results_dir / 'classification_report.txt'}")
+    print(f"Saved summary to {results_dir / 'summary.txt'}")
+    print(f"Final test accuracy: {test_accuracy:.6f}")
 
 
 if __name__ == "__main__":
