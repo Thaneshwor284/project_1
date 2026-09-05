@@ -1,16 +1,14 @@
-numpy>=1.24.0
-opencv-python>=4.8.0
-matplotlib>=3.7.0
-scikit-learn>=1.3.0
-scikit-image>=0.21.0
-torch>=2.0.0
-torchvision>=0.15.0
-pillow>=10.0.0
-joblib>=1.3.0
-pandas>=2.0.0
-tqdm>=4.65.0
-seaborn>=0.12.0
-tensorflow>=2.22.0
+numpy==1.26.4
+opencv-python==4.11.0.86
+matplotlib==3.11.1
+scikit-learn==1.9.0
+scikit-image==0.26.0
+seaborn==0.13.2
+pillow==12.3.0
+joblib==1.5.3
+tqdm==4.70.0
+tensorflow==2.15.0
+keras==2.15.0
 gpiozero>=2.0.0
 # Raspberry Pi only; do not install on Windows or macOS development machines.
 RPi.GPIO>=0.7.1; platform_system == "Linux" and platform_machine == "aarch64"
