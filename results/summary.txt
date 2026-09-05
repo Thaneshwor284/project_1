@@ -1,0 +1,4 @@
+Best model path: results\best_model.keras
+Test loss: 0.319664
+Test accuracy: 0.918401
+Num classes: 10
