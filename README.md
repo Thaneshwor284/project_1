@@ -128,6 +128,40 @@ python predict.py path/to/leaf.jpg
 
 The script prints the predicted class and confidence. The conversion and Keras/TFLite comparison are documented in `results/tflite_conversion_summary.txt`.
 
+## Raspberry Pi Spray Automation
+
+### Hardware Needed
+
+- Raspberry Pi with a compatible camera
+- 5V opto-isolated relay module
+- DC water pump
+- Separate power supply for the pump
+
+The pump must **NEVER** be powered from the Pi's own 5V rail or GPIO. Use the pump's separate power supply and switch that supply through the relay. Connect the Pi GPIO only to the relay's control input.
+
+### Running the Spray Controller
+
+From the project root on the Raspberry Pi, run:
+
+```bash
+python spray_control.py --model results/best_model.tflite --classes results/split_summary.json --camera-index 0
+```
+
+The required arguments are `--model` (the TFLite model), `--classes` (the JSON file containing `class_names`), and `--camera-index` (the camera device index, normally `0`). The controller captures frames, classifies them, and briefly activates the pump through the relay when the prediction is a disease class above the configured confidence threshold.
+
+### Configuration Options
+
+The following constants in `spray_control.py` control the automation:
+
+- `CONFIDENCE_THRESHOLD`: minimum prediction confidence required before spraying
+- `HEALTHY_CLASS`: class name that must never trigger spraying
+- `SPRAY_DURATION_SEC`: how long the relay stays active for each spray
+- `RELAY_PIN`: Raspberry Pi GPIO pin connected to the relay input
+
+### Recommended Hardware Test Order
+
+Test in this order: relay alone -> pump alone -> pump through relay -> prediction alone -> full script on a healthy image -> full script on a diseased image.
+
 ### Individual Script Descriptions
 
 #### 1. Data Preparation (`01_data_preparation.py`)
